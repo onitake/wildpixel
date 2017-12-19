@@ -87,7 +87,7 @@ int main() {
 		// spawn a new spark at the bottom row
 		uint8_t p = lfsr_get_byte();
 		//uint8_t p = rand();
-		p = ((p >> 1) & 0x3) + (p & 0x01);
+		p %= WS_WIDTH;
 		ws_set_pixel(p, WS_HEIGHT - 1, add_sat_u8(ws_get_pixel(p, WS_HEIGHT - 1), 8));
 		
 		for (uint8_t y = WS_HEIGHT; y-- > 0;) {
