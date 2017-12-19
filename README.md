@@ -17,6 +17,21 @@ some supported examples:
 * arduino pro mini
 * numerous clones, such as those found on aliexpress
 
+## build and use
+
+you need gnu make, avr-gcc, avr-libc and avrdude to compile and flash
+the source code to your arduino. no arduino "ide" is required.
+
+just use a simple text editor to modify the source code!
+
+then, recompile with:
+
+   make
+
+to write the resulting binary to your arduino, use:
+
+   make flash
+
 ## modules
 
 ### ws2812
