@@ -15,16 +15,41 @@ incarnation are arduino boards based on atmel microcontrollers.
 some supported examples:
 * arduino uno
 * arduino pro mini
-* numerous clones, such as those found on aliexpress
+* numerous clones
 
 ## build and use
 
 you need gnu make, avr-gcc, avr-libc and avrdude to compile and flash
-the source code to your arduino. no arduino "ide" is required.
+the source code to your arduino. no arduino ide or libraries are required.
 
 just use a simple text editor to modify the source code!
+it's in plain c and makes liberal use of macros. some inline assembly is used
+where necessary.
 
-then, recompile with:
+you also (obviously) need hardware to run this on.
+
+i recommend an arduino pro mini, a couple of ws2812 leds on a stripe,
+a 5v power bank and a serial programmer. also some leads and a usb a type plug
+to connect the stuff together.
+all of this stuff can be had dead cheap on aliexpress, for example.
+
+### wiring
+
+connect the input data pin of the led stripe to portd2 (yes, that's digital
+pin 2 on the arduino), vcc to +5v and gnd to gnd.
+
+attach the programmer to the arduino. if you use the uno, you don't need this
+as the usb programming interface is built in.
+
+to make it run from a power bank later, solder two leads to the base usb plug
+and fixate them with some hot glue.
+these should be connected to +5v and gnd later (once it's programmed).
+
+todo: pictures!
+
+### compile and run
+
+compile with:
 
    make
 
