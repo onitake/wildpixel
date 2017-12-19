@@ -38,6 +38,11 @@ all of this stuff can be had dead cheap on aliexpress, for example.
 connect the input data pin of the led stripe to portd2 (yes, that's digital
 pin 2 on the arduino), vcc to +5v and gnd to gnd.
 
+the stripe should have 20 leds, arranged in 4 rows by 5 leds each.
+arrange all data in pins to the left and connect the last pixel of each row
+to the first led of the next.
+if you want more leds, adapt config.h and main.c accordingly.
+
 attach the programmer to the arduino. if you use the uno, you don't need this
 as the usb programming interface is built in.
 
