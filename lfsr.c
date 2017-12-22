@@ -28,43 +28,51 @@
 
 static uint32_t lfsr __attribute__((section(".noinit")));
 
-void lfsr_shift() {
-	// 31, 21, 1, 0
-	uint8_t x = 1;
-	x ^= (lfsr >> 1) & 1;
-	x ^= (lfsr >> 21) & 1;
-	x ^= (lfsr >> 31) & 1;
-	lfsr = (lfsr << 1) | x;
+uint8_t lfsr_shift() {
+	// operate in galois counting mode, it's more efficient
+	uint8_t lsb = (uint8_t) lfsr & 1;   // get lsb (i.e., the output bit)
+	lfsr >>= 1;                         // shift register
+	if (lsb) {                          // if the output bit is 1, apply toggle mask (i.e. polynomial)
+		// p = x³¹ + x²¹ + x¹ + x⁰
+		lfsr ^= 0x80200003;
+	}
+	return lsb;
 }
 
 void lfsr_init(uint32_t seed) {
-	lfsr = seed;
-	uint8_t i;
-	for (i = 0; i < 32; i++) {
+	// avoid lockup state
+	if (seed == 0) {
+		lfsr = 1;
+	} else {
+		lfsr = seed;
+	}
+	// pre-clock one full cycle
+	for (uint8_t i = 0; i < 32; i++) {
 		lfsr_shift();
 	}
 }
 
 uint8_t lfsr_get_bit() {
-	uint8_t ret = lfsr >> 31;
-	lfsr_shift();
-	return ret;
+	// a single bit is equal to the output of the lfsr
+	return lfsr_shift();
 }
 
 uint8_t lfsr_get_byte() {
-	uint8_t ret = lfsr >> 24;
-	uint8_t i;
-	for (i = 0; i < 8; i++) {
-		lfsr_shift();
+	// clock in 8 bits
+	uint8_t ret = 0;
+	for (uint8_t i = 0; i < 8; i++) {
+		uint8_t bit = lfsr_shift();
+		ret |= bit << (7 - i);
 	}
 	return ret;
 }
 
 uint16_t lfsr_get_short() {
-	uint16_t ret = lfsr >> 16;
-	uint8_t i;
-	for (i = 0; i < 16; i++) {
-		lfsr_shift();
+	// clock in 16 bits
+	uint16_t ret = 0;
+	for (uint8_t i = 0; i < 16; i++) {
+		uint16_t bit = lfsr_shift();
+		ret |= bit << (15 - i);
 	}
 	return ret;
 }
