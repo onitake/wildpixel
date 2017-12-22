@@ -71,4 +71,23 @@ static inline int8_t fastcos8(uint8_t angle) {
 // else         -> a = a + b
 #define acc_sat_u8(a, b) (a) = (((uint16_t) (a) + (b) > 255) ? 255 : ((a) + (b)))
 
+// some handy 8bit fixed-point operations
+// these require a hardware 8x8=16 multiplier for efficient operation
+
+// scaled fixed point 8x8=8 bit multiply
+static inline uint8_t mul_fix8(uint8_t x, uint8_t y) {
+	return (uint8_t) (((uint16_t) x * y) >> 8);
+}
+
+// scaled fixed point 8x8+16=8 bit multiply and add
+// note: may overflow when product and addend are both larger than 0x7fff
+static inline uint8_t madd_fix8(uint8_t x, uint8_t y, uint16_t a) {
+	return (uint8_t) (((uint16_t) x * (uint16_t) y + (uint16_t) a) >> 8);
+}
+
+// scaled fixed point 8x8+8x8=8 blend function
+static inline uint8_t blend_fix8(uint8_t a, uint8_t b, uint8_t alpha) {
+	return madd_fix8(a, 255 - alpha, (uint16_t) b * alpha);
+}
+
 #endif /*_TINYMATH_H*/
