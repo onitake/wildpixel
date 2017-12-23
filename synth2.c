@@ -2,7 +2,7 @@
  * Noise generator test program
  * Copyright 2017 Gregor Riepl <onitake@gmail.com>
  *
- * Compile with: gcc -Wall -O0 -g -o synth2 $(pkg-config --cflags --libs libpulse-simple) synth2.c lfsr.c
+ * Compile with: gcc -Wall -O0 -g -o synth2 $(pkg-config --cflags --libs libpulse-simple) synth2.c lfsr.c tinymath.c
  * To be used on the host system, not a µC.
  *
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -31,37 +31,25 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <pulse/simple.h>
 #include "lfsr.h"
+#include "tinymath.h"
 
 // sampling frequency (Hz)
 #define SMP_FREQ 44100
 // time base (1/f)
 #define SMP_DT (1.0 / SMP_FREQ)
 // number of sample to average (for gaussian distribution)
-#define SMP_GAUSS 2
+#define SMP_GAUSS 4
 // sample volume (0..255)
-#define SMP_VOLUME 60
+#define SMP_VOLUME 255
 // sample buffer size
 #define SMP_BUFFER (SMP_FREQ / 2)
 
-#define fir_mk_lowpass_alpha(f) (uint8_t) (255.0 * ((2.0 * M_PI * SMP_DT * f) / (2.0 * M_PI * SMP_DT * f + 1)))
-#define fir_mk_highpass_alpha(f) (uint8_t) (255.0 * (1.0 / (2.0 * M_PI * SMP_DT * f + 1)))
-
-// scaled fixed point 8x8=8 bit multiply
-uint8_t mul_fix8(uint8_t x, uint8_t y) {
-	return (uint8_t) (((uint16_t) x * y) >> 8);
-}
-
-// scaled fixed point 8x8+16=8 bit multiply and add
-// note: may overflow when product and addend are both larger than 0x7fff
-uint8_t madd_fix8(uint8_t x, uint8_t y, uint16_t a) {
-	return (uint8_t) (((uint16_t) x * (uint16_t) y + (uint16_t) a) >> 8);
-}
-
-uint8_t blend(uint8_t a, uint8_t b, uint8_t alpha) {
-	return madd_fix8(a, 255 - alpha, (uint16_t) b * alpha);
-}
+#define fir_mk_lowpass_alpha(f) (uint8_t) (255.0 * ((2.0 * M_PI * SMP_DT * (f)) / (2.0 * M_PI * SMP_DT * (f) + 1)))
+#define fir_mk_highpass_alpha(f) (uint8_t) (255.0 * (1.0 / (2.0 * M_PI * SMP_DT * (f) + 1)))
 
 uint8_t rnd_get() {
 	//return (uint8_t) rand();
@@ -77,27 +65,42 @@ uint8_t rnd_gaussian() {
 }
 
 // fixed-point volume scaling
-uint8_t sample_scale(uint8_t sample, uint8_t volume) {
-	return mul_fix8(sample, volume);
+int8_t sample_scale(int8_t sample, uint8_t volume) {
+	return mul_fix_su8(sample, volume);
 }
 
 // finite impulse response low-pass filter
 // alpha must be calculated with fir_mk_lowpass_alpha
-uint8_t fir_lowpass(uint8_t last, uint8_t current, uint8_t alpha) {
-	return blend(last, current, alpha);
+// y1 = last output value
+// x1 = last input value
+// x0 = current input value
+// returns y0, the current output value
+int8_t fir_lowpass(int8_t y1, int8_t x1, int8_t x0, uint8_t alpha) {
+	//return madd_fix_su8(last, 255 - alpha, (int16_t) current * (uint16_t) alpha);
+	//return blend_fix_s8(last, current, alpha);
+	return mul_fix_su8(y1, 255 - alpha) + mul_fix_su8(x0, alpha);
+	//double a = alpha / 255.0;
+	//return (int8_t) (y1 * (1.0 - a) + x0 * a);
 }
 
 // finite impulse response low-pass filter
 // alpha must be calculated with fir_mk_highpass_alpha
-// FIXME produces nasty results for low frequencies, presumably due to integer overflow
-uint8_t fir_highpass(uint8_t last, uint8_t diff, uint8_t alpha) {
-	return mul_fix8(last + diff, alpha);
+// y1 = last output value
+// x1 = last input value
+// x0 = current input value
+// returns y0, the current output value
+int8_t fir_highpass(int8_t y1, int8_t x1, int8_t x0, uint8_t alpha) {
+	return mul_fix_su8(y1 + x0 - x1, alpha);
+	//double a = alpha / 255.0;
+	//return (int8_t) (((double) y1 + x0 - x1) * a);
 }
 
 int main(int argc, char **argv) {
 	//srand(0);
 	lfsr_init(1);
 	uint8_t *buffer = calloc(SMP_BUFFER, 1);
+	
+	int fd = open("out.pcm", O_CREAT | O_WRONLY | O_TRUNC, 0666);
 	
 	pa_sample_spec ss;
 	ss.format = PA_SAMPLE_U8;
@@ -117,24 +120,35 @@ int main(int argc, char **argv) {
 	
 	uint16_t fc = 0;
 	while (1) {
-		uint8_t alpha = fir_mk_lowpass_alpha(fc);
-		uint8_t alpha2 = fir_mk_highpass_alpha(fc);
-		printf("fc = %u alpha = %u alpha2 = %u\n", fc, alpha, alpha2);
-		uint8_t prev = 0;
+		uint8_t alpha_low = fir_mk_lowpass_alpha(fc);
+		uint8_t alpha_high = fir_mk_highpass_alpha(fc);
+		printf("fc = %uHz alpha_low = %u alpha_high = %u\n", fc, alpha_low, alpha_high);
+		int8_t y1 = 0, x1 = 0;
+		int8_t min = 127, max = -128;
 		for (size_t i = 0; i < SMP_BUFFER; i++) {
-			uint8_t r = rnd_gaussian();
-			uint8_t v = sample_scale(r, SMP_VOLUME);
-			uint8_t c = prev;
-			prev = v;
-			if (i >= 1) {
-				v = fir_lowpass(buffer[i - 1], v, alpha);
-//				v = fir_highpass(buffer[i - 1], v - c, alpha2);
-			}
-			uint8_t s = v;
-			buffer[i] = s;
+			// sample production
+			int8_t r = (int8_t) rnd_gaussian();
+			// volume scaling
+			int8_t x0 = sample_scale(r, SMP_VOLUME);
+			
+			// filter depending on last input, last output and current input values
+			int8_t y0 = fir_lowpass(y1, x1, x0, alpha_low);
+// 			int8_t y0 = fir_highpass(y1, x1, x0, alpha_high);
+			
+			// stats
+			if (y0 < min) min = y0;
+			if (y0 > max) max = y0;
+
+			// store the sample
+			buffer[i] = (uint8_t) y0;
+			// update last values
+			x1 = x0;
+			y1 = y0;
 		}
+		printf("min = %d max = %d\n", min, max);
 		// frequency step (30Hz)
-		fc = (fc + 30) % 10000;
+		fc = (fc + 50) % 10000;
+// 		fc = (fc + 1000) % 20000;
 		// send for playback
 		pa_simple_write(
 			s,
@@ -142,11 +156,14 @@ int main(int argc, char **argv) {
 			SMP_BUFFER,
 			NULL
 		);
+		write(fd, buffer, SMP_BUFFER);
 	}
 	
 	pa_simple_drain(s, NULL);
 	pa_simple_free(s);
 	free(buffer);
+	
+	close(fd);
 	
 	return 0;
 }
