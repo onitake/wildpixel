@@ -28,7 +28,13 @@
 #define _TINYMATH_H
 
 #include <stdint.h>
+
+#ifdef __AVR_ARCH__
 #include <avr/pgmspace.h>
+#else
+#define PROGMEM
+#define pgm_read_byte(ref) (*(uint8_t *) (ref))
+#endif
 
 extern const PROGMEM uint8_t tiny_sintable_64[];
 
@@ -72,22 +78,52 @@ static inline int8_t fastcos8(uint8_t angle) {
 #define acc_sat_u8(a, b) (a) = (((uint16_t) (a) + (b) > 255) ? 255 : ((a) + (b)))
 
 // some handy 8bit fixed-point operations
-// these require a hardware 8x8=16 multiplier for efficient operation
+// these are intended for hardware with an efficient 8x8=16 integer multiplier
 
 // scaled fixed point 8x8=8 bit multiply
-static inline uint8_t mul_fix8(uint8_t x, uint8_t y) {
+static inline uint8_t mul_fix_u8(uint8_t x, uint8_t y) {
 	return (uint8_t) (((uint16_t) x * y) >> 8);
 }
 
 // scaled fixed point 8x8+16=8 bit multiply and add
 // note: may overflow when product and addend are both larger than 0x7fff
-static inline uint8_t madd_fix8(uint8_t x, uint8_t y, uint16_t a) {
+static inline uint8_t madd_fix_u8(uint8_t x, uint8_t y, uint16_t a) {
 	return (uint8_t) (((uint16_t) x * (uint16_t) y + (uint16_t) a) >> 8);
 }
 
+// scaled signed fixed point 8x8=8 bit multiply
+static inline int8_t mul_fix_s8(int8_t x, int8_t y) {
+	return (int8_t) (((int16_t) x * y) / 256);
+}
+
+// scaled signed fixed point 8x8+16=8 bit multiply and add
+// note: may overflow when product and addend are both larger than 0x7fff
+static inline int8_t madd_fix_s8(int8_t x, int8_t y, int16_t a) {
+	return (int8_t) (((int16_t) x * (int16_t) y + (int16_t) a) / 256);
+	//return (int8_t) (mul_fix_s8(x, y) + a);
+}
+
+// scaled signed/unsigned fixed point 8x8=8 bit multiply
+static inline int8_t mul_fix_su8(int8_t x, uint8_t y) {
+	return (int8_t) (((int16_t) x * (uint16_t) y) / 256);
+}
+
+// scaled signed/unsigned fixed point 8x8+16=8 bit multiply and add
+// note: may overflow when product and addend are both larger than 0x7fff
+static inline int8_t madd_fix_su8(int8_t x, uint8_t y, int16_t a) {
+	return (int8_t) (((int16_t) x * (uint16_t) y + (int16_t) a) / 256);
+	//return (int8_t) (mul_fix_s8(x, y) + a);
+}
+
 // scaled fixed point 8x8+8x8=8 blend function
-static inline uint8_t blend_fix8(uint8_t a, uint8_t b, uint8_t alpha) {
-	return madd_fix8(a, 255 - alpha, (uint16_t) b * alpha);
+static inline uint8_t blend_fix_u8(uint8_t a, uint8_t b, uint8_t alpha) {
+	return madd_fix_u8(a, 255 - alpha, (uint16_t) b * alpha);
+}
+
+// scaled signed fixed point 8x8+8x8=8 blend function
+static inline int8_t blend_fix_s8(int8_t a, int8_t b, uint8_t alpha) {
+	//return madd_fix_su8(a, 255 - alpha, (int16_t) b * (uint16_t) alpha);
+	return mul_fix_su8(a, 255 - alpha) + mul_fix_su8(b, alpha);
 }
 
 #endif /*_TINYMATH_H*/
