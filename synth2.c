@@ -36,20 +36,18 @@
 #include <pulse/simple.h>
 #include "lfsr.h"
 #include "tinymath.h"
+#include "dsp.h"
 
 // sampling frequency (Hz)
 #define SMP_FREQ 44100
 // time base (1/f)
-#define SMP_DT (1.0 / SMP_FREQ)
+#define SMP_DT dsp_sample_period(SMP_FREQ)
 // number of sample to average (for gaussian distribution)
 #define SMP_GAUSS 4
 // sample volume (0..255)
 #define SMP_VOLUME 255
 // sample buffer size
 #define SMP_BUFFER (SMP_FREQ / 2)
-
-#define fir_mk_lowpass_alpha(f) (uint8_t) (255.0 * ((2.0 * M_PI * SMP_DT * (f)) / (2.0 * M_PI * SMP_DT * (f) + 1)))
-#define fir_mk_highpass_alpha(f) (uint8_t) (255.0 * (1.0 / (2.0 * M_PI * SMP_DT * (f) + 1)))
 
 uint8_t rnd_get() {
 	//return (uint8_t) rand();
@@ -62,37 +60,6 @@ uint8_t rnd_gaussian() {
 		sum += rnd_get();
 	}
 	return (uint8_t) (sum / SMP_GAUSS);
-}
-
-// fixed-point volume scaling
-int8_t sample_scale(int8_t sample, uint8_t volume) {
-	return mul_fix_su8(sample, volume);
-}
-
-// finite impulse response low-pass filter
-// alpha must be calculated with fir_mk_lowpass_alpha
-// y1 = last output value
-// x1 = last input value
-// x0 = current input value
-// returns y0, the current output value
-int8_t fir_lowpass(int8_t y1, int8_t x1, int8_t x0, uint8_t alpha) {
-	//return madd_fix_su8(last, 255 - alpha, (int16_t) current * (uint16_t) alpha);
-	//return blend_fix_s8(last, current, alpha);
-	return mul_fix_su8(y1, 255 - alpha) + mul_fix_su8(x0, alpha);
-	//double a = alpha / 255.0;
-	//return (int8_t) (y1 * (1.0 - a) + x0 * a);
-}
-
-// finite impulse response low-pass filter
-// alpha must be calculated with fir_mk_highpass_alpha
-// y1 = last output value
-// x1 = last input value
-// x0 = current input value
-// returns y0, the current output value
-int8_t fir_highpass(int8_t y1, int8_t x1, int8_t x0, uint8_t alpha) {
-	return mul_fix_su8(y1 + x0 - x1, alpha);
-	//double a = alpha / 255.0;
-	//return (int8_t) (((double) y1 + x0 - x1) * a);
 }
 
 int main(int argc, char **argv) {
@@ -120,8 +87,8 @@ int main(int argc, char **argv) {
 	
 	uint16_t fc = 0;
 	while (1) {
-		uint8_t alpha_low = fir_mk_lowpass_alpha(fc);
-		uint8_t alpha_high = fir_mk_highpass_alpha(fc);
+		uint8_t alpha_low = dsp_iir_lowpass_alpha(fc, SMP_DT);
+		uint8_t alpha_high = dsp_iir_highpass_alpha(fc, SMP_DT);
 		printf("fc = %uHz alpha_low = %u alpha_high = %u\n", fc, alpha_low, alpha_high);
 		int8_t y1 = 0, x1 = 0;
 		int8_t min = 127, max = -128;
@@ -129,11 +96,11 @@ int main(int argc, char **argv) {
 			// sample production
 			int8_t r = (int8_t) rnd_gaussian();
 			// volume scaling
-			int8_t x0 = sample_scale(r, SMP_VOLUME);
+			int8_t x0 = dsp_sample_scale(r, SMP_VOLUME);
 			
 			// filter depending on last input, last output and current input values
-			int8_t y0 = fir_lowpass(y1, x1, x0, alpha_low);
-// 			int8_t y0 = fir_highpass(y1, x1, x0, alpha_high);
+			int8_t y0 = dsp_iir_lowpass(y1, x1, x0, alpha_low);
+// 			int8_t y0 = dsp_iir_highpass(y1, x1, x0, alpha_high);
 			
 			// stats
 			if (y0 < min) min = y0;
@@ -147,8 +114,8 @@ int main(int argc, char **argv) {
 		}
 		printf("min = %d max = %d\n", min, max);
 		// frequency step (30Hz)
-		fc = (fc + 50) % 10000;
-// 		fc = (fc + 1000) % 20000;
+// 		fc = (fc + 50) % 10000;
+		fc = (fc + 1000) % 20000;
 		// send for playback
 		pa_simple_write(
 			s,
