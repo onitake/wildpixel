@@ -80,26 +80,46 @@ certain special use cases.
 a palette generator.
 
 can use a ROM palette (needs to be pregenerated), build a palette on
-startup or calculate color values on the fly.
+startup or calculate colour values on the fly.
 
 ### lfsr
 
 avr-libc already includes a pseudo random number generator, but it uses
 too much code space and too many cycles.
 
-this one is based on a really primitive linear feedback shift register.
-but it should be sufficient for many use cases.
-
-it seems to be buggy currently. patches welcome.
+this one is based on a 32-bit linear feedback shift register, with a polynomial
+that should give you the maximum period possible (2³¹-1).
+the lfsr is implemented as a galois counter, resulting in fairly optimal
+code for an 8-bit microcontroller.
 
 ### tinymath
 
-a collection of small and/or fast math routines that can be useful if you
-don't need/want accurate results.
+a collection of small and/or fast math routines, optimised for avr cores.
 
-## who & legal
+included are:
+* table-based 8-bit integer sine and cosine (with a precomputed 64-entry table)
+* fixed-point 8-bit multiply routines that make best use of the atmega's
+  8x8->16 mul instructions
+
+### dsp
+
+some wave generation and filtering routines.
+
+makes use of the tinymath library.
+
+## other
+
+there's a small test program, synth2, which uses the dsp and tinymath modules
+to generate sound samples and plays them through the sound card on
+a regular computer.
+
+it can be used as a test bed for synthesisers on your microcontroller.
+
+see the head of synth2.c for compile instructions.
+
+## who and legal
 
 wildpixel was written by and is copyright 2017 by onitake <onitake@gmail.com> .
 
-the code is available under the simplified (2-clause) BSD license.
-see the LICENSE file for details.
+the code is available under the simplified (2-clause) bsd license.
+see the license file for details.
